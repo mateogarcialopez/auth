@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   AuthenticationDetails,
   CognitoUser,
+  CognitoUserAttribute,
   CognitoUserPool,
 } from 'amazon-cognito-identity-js';
 import { AuthDto } from './dtos/auth.dto';
@@ -20,23 +21,38 @@ export class AuthService {
   }
 
   authenticateUser(data: AuthDto) {
-    const { userID, password } = data;
+    const { rut } = data;
+    const userid = process.env.USERID;
+    const newUser = new CognitoUser({ Username: userid, Pool: this.userPool });
+
+    const attribute = [
+      new CognitoUserAttribute({
+        Name: 'custom:rut',
+        Value: rut,
+      }),
+    ];
+
     const authenticationDetails = new AuthenticationDetails({
-      Username: userID,
-      Password: password,
+      Username: process.env.USERID,
+      Password: process.env.USERPASSWORD,
     });
 
-    const userData = {
-      Username: userID,
-      Pool: this.userPool,
-    };
-
-    const newUser = new CognitoUser(userData);
-
     return new Promise((resolve, reject) => {
-      return newUser.authenticateUser(authenticationDetails, {
+      newUser.authenticateUser(authenticationDetails, {
         onSuccess: (result) => {
-          resolve(result);
+          newUser.updateAttributes(attribute, (err, res) => {
+            if (err) {
+              reject(err);
+            }
+            return newUser.authenticateUser(authenticationDetails, {
+              onSuccess: (result) => {
+                resolve({ idToken: result.getIdToken().getJwtToken() });
+              },
+              onFailure: (err) => {
+                reject(err);
+              },
+            });
+          });
         },
         onFailure: (err) => {
           reject(err);
@@ -46,12 +62,18 @@ export class AuthService {
   }
 
   registerUser(registerRequest: RegisterDto) {
-    const { name, password } = registerRequest;
+    const { name, password, rut } = registerRequest;
     return new Promise((resolve, reject) => {
       return this.userPool.signUp(
-        name,
-        password,
-        null,
+        'edwin',
+        'Edwin3136043363*',
+        [
+          new CognitoUserAttribute({
+            Name: 'custom:rut',
+            Value: rut,
+          }),
+        ],
+        //null,
         null,
         (error, result) => {
           if (!result) {
